@@ -1,0 +1,6 @@
+{
+  "name": "Finance Coach",
+  "description": "AI-powered personal finance coach with bank statement ingestion, category learning, subscription alerts, What-If goal planning, drift nudges, and monthly reviews.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
