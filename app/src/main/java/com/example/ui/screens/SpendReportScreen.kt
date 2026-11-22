@@ -66,6 +66,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.TransactionEntity
 import com.example.ui.components.CategoryIcons
 import com.example.ui.components.Formatters
+import com.example.ui.components.SpreadsheetViewerDialog
 import com.example.ui.components.charts.PaymentModeBarChart
 import com.example.ui.components.charts.SpendBarChart
 import com.example.ui.components.charts.SpendPieChart
@@ -76,6 +77,7 @@ import com.example.ui.theme.IncomeGreen
 import com.example.ui.theme.SkyTertiary
 import com.example.ui.theme.WarningOrange
 import com.example.ui.viewmodel.MainViewModel
+import com.example.util.FileSaveResult
 import com.example.util.ReportExporter
 import com.example.util.ReportPeriod
 
@@ -93,8 +95,22 @@ fun SpendReportScreen(
     var weekOffset by remember { mutableIntStateOf(0) }
     var monthOffset by remember { mutableIntStateOf(0) }
     var showDownloadMenu by remember { mutableStateOf(false) }
+    var spreadsheetToView by remember { mutableStateOf<FileSaveResult?>(null) }
 
     val monthlyAllowance = profile?.monthlyAllowance ?: 10000.0
+
+    fun downloadAndOpenCsv(report: com.example.util.SpendReport) {
+        val result = ReportExporter.exportCsv(context, report)
+        Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+        if (result.success) {
+            val openedExternally = result.fileUri?.let { uri ->
+                ReportExporter.openFileExternally(context, uri, result.mimeType)
+            } ?: false
+            if (!openedExternally) {
+                spreadsheetToView = result
+            }
+        }
+    }
 
     // Compute active report reactively based on period and offset
     val activeReport = remember(selectedPeriod, weekOffset, monthOffset, transactions, budgets, monthlyAllowance) {
@@ -163,9 +179,9 @@ fun SpendReportScreen(
                         DropdownMenuItem(
                             text = {
                                 Column {
-                                    Text("Download CSV (Spreadsheet)", fontWeight = FontWeight.SemiBold)
+                                    Text("Download & Open Spreadsheet (.csv)", fontWeight = FontWeight.SemiBold)
                                     Text(
-                                        "Saved to Downloads/FinanceCoach",
+                                        "Saves to Downloads/FinanceCoach & opens spreadsheet",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -180,8 +196,7 @@ fun SpendReportScreen(
                             },
                             onClick = {
                                 showDownloadMenu = false
-                                val result = ReportExporter.exportCsv(context, activeReport)
-                                Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                                downloadAndOpenCsv(activeReport)
                             },
                             modifier = Modifier.testTag("download_csv_menu_item")
                         )
@@ -572,13 +587,12 @@ fun SpendReportScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
-                            onClick = {
-                                val result = ReportExporter.exportCsv(context, activeReport)
-                                Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
-                            },
+                            onClick = { downloadAndOpenCsv(activeReport) },
                             modifier = Modifier.testTag("bottom_cta_download_csv_btn")
                         ) {
-                            Text("Download CSV")
+                            Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Download & Open CSV")
                         }
                         OutlinedButton(
                             onClick = {
@@ -594,6 +608,14 @@ fun SpendReportScreen(
                 }
             }
         }
+    }
+
+    if (spreadsheetToView != null) {
+        SpreadsheetViewerDialog(
+            fileResult = spreadsheetToView!!,
+            onShare = { ReportExporter.shareReport(context, activeReport, asCsv = true) },
+            onDismiss = { spreadsheetToView = null }
+        )
     }
 }
 

@@ -13,6 +13,7 @@ import com.example.ai.RecurringDetectionEngine
 import com.example.ai.SpendingDriftEngine
 import com.example.data.model.AccountRuleEntity
 import com.example.data.model.BudgetEntity
+import com.example.data.model.DebtEntity
 import com.example.data.model.GoalEntity
 import com.example.data.model.InvestmentEntity
 import com.example.data.model.LearnedMappingEntity
@@ -23,6 +24,7 @@ import com.example.data.repository.FinanceRepository
 import com.example.sms.ParsedSmsTransaction
 import com.example.sms.SmsInboxReader
 import com.example.sms.SmsTransactionParser
+import com.example.ui.components.ChatVisualAnalysis
 import com.example.util.StatementImportEngine
 import com.example.util.StatementImportPreview
 import com.example.util.StatementSourceFormat
@@ -42,7 +44,8 @@ data class ChatMessage(
     val id: String = java.util.UUID.randomUUID().toString(),
     val text: String,
     val isFromUser: Boolean,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val visualAnalysis: ChatVisualAnalysis? = null
 )
 
 data class CategoryBreakdown(
@@ -95,6 +98,9 @@ class MainViewModel(private val repository: FinanceRepository) : ViewModel() {
     val allLearnedMappings: StateFlow<List<LearnedMappingEntity>> = repository.allLearnedMappings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val allDebts: StateFlow<List<DebtEntity>> = repository.allDebts
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     private val _importPreview = MutableStateFlow<StatementImportPreview?>(null)
     val importPreview: StateFlow<StatementImportPreview?> = _importPreview.asStateFlow()
 
@@ -121,7 +127,7 @@ class MainViewModel(private val repository: FinanceRepository) : ViewModel() {
     private val _chatMessages = MutableStateFlow<List<ChatMessage>>(
         listOf(
             ChatMessage(
-                text = "Hi! I'm your Finance Coach — an educational personal-finance coach. I can model What-If scenarios (like cutting dining out 30% or rent going up), audit recurring subscriptions, review your month, and explain personal finance concepts — without recommending specific stocks or securities.",
+                text = "👋 **Welcome to Finance Coach**\n\nI'm your educational personal-finance coach. Ask me to model **What-If scenarios** with **visual bar charts** (like *\"What if I cut dining out by 30%?\"* or *\"What if my rent goes up ₹2,000?\"*), audit **recurring subscriptions**, review your month, or explain finance concepts — without recommending specific stocks or securities.",
                 isFromUser = false
             )
         )
@@ -308,6 +314,9 @@ class MainViewModel(private val repository: FinanceRepository) : ViewModel() {
     private val _latestDetectedUpiTxn = MutableStateFlow<TransactionEntity?>(null)
     val latestDetectedUpiTxn: StateFlow<TransactionEntity?> = _latestDetectedUpiTxn.asStateFlow()
 
+    private val _latestAddedTxnId = MutableStateFlow<Long?>(null)
+    val latestAddedTxnId: StateFlow<Long?> = _latestAddedTxnId.asStateFlow()
+
     fun dismissDetectedUpiTxn() {
         _latestDetectedUpiTxn.value = null
     }
@@ -364,11 +373,12 @@ class MainViewModel(private val repository: FinanceRepository) : ViewModel() {
                 timeStr = parsed.time
             )
 
-            repository.insertTransaction(transaction)
+            val insertedId = repository.insertTransaction(transaction)
+            _latestAddedTxnId.value = insertedId
 
             // If it's a UPI transaction, record as latest detected for immediate UI focus
             if (parsed.mode.equals("UPI", ignoreCase = true) || body.contains("upi", ignoreCase = true)) {
-                _latestDetectedUpiTxn.value = transaction
+                _latestDetectedUpiTxn.value = transaction.copy(id = insertedId)
             }
 
             val sourceText = when (catResult.source) {
@@ -393,20 +403,30 @@ class MainViewModel(private val repository: FinanceRepository) : ViewModel() {
         notes: String
     ) {
         viewModelScope.launch {
-            repository.insertTransaction(
+            val now = System.currentTimeMillis()
+            val dateFmt = java.text.SimpleDateFormat("ddMMMyy", java.util.Locale.ENGLISH)
+            val timeFmt = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.ENGLISH)
+            // Ensure manual entry sorts above any accidental legacy future-dated row
+            val existingMaxDate = allTransactions.value.maxOfOrNull { it.date } ?: 0L
+            val effectiveDate = if (existingMaxDate > now) existingMaxDate + 1000L else now
+
+            val insertedId = repository.insertTransaction(
                 TransactionEntity(
                     amount = amount,
                     type = type,
                     merchant = merchant.trim(),
                     category = category,
-                    date = System.currentTimeMillis(),
+                    date = effectiveDate,
                     paymentMethod = paymentMethod,
                     accountRef = accountRef.trim(),
                     notes = notes.trim(),
                     isAiCategorized = false,
-                    categorizedByRule = false
+                    categorizedByRule = false,
+                    dateStr = dateFmt.format(java.util.Date(now)),
+                    timeStr = timeFmt.format(java.util.Date(now))
                 )
             )
+            _latestAddedTxnId.value = insertedId
             _toastEvent.emit("Transaction saved: ₹${amount.toLong()} to $merchant")
         }
     }
@@ -1045,15 +1065,20 @@ class MainViewModel(private val repository: FinanceRepository) : ViewModel() {
         viewModelScope.launch {
             _isAssistantThinking.value = true
             try {
-                val answer = assistantEngine.answerQuestion(
+                val reply = assistantEngine.answerQuestionWithVisual(
                     question = question,
                     transactions = repository.getTransactionsSnapshot(),
                     budgets = repository.getBudgetsSnapshot(),
                     profile = userProfile.value,
                     goals = repository.getGoalsSnapshot(),
-                    recurring = repository.getRecurringSnapshot()
+                    recurring = repository.getRecurringSnapshot(),
+                    debts = repository.getDebtsSnapshot()
                 )
-                val botMsg = ChatMessage(text = answer, isFromUser = false)
+                val botMsg = ChatMessage(
+                    text = reply.text,
+                    isFromUser = false,
+                    visualAnalysis = reply.visualAnalysis
+                )
                 _chatMessages.value = _chatMessages.value + botMsg
             } catch (e: Exception) {
                 _chatMessages.value = _chatMessages.value + ChatMessage(
@@ -1533,6 +1558,61 @@ class MainViewModel(private val repository: FinanceRepository) : ViewModel() {
             )
 
             _toastEvent.emit("Sample college transactions, budgets & rules loaded!")
+        }
+    }
+
+    // ==================== DEBT & LOANS MODULE ====================
+
+    fun addDebt(debt: DebtEntity) {
+        viewModelScope.launch {
+            repository.insertDebt(debt)
+            _toastEvent.emit("Added ${debt.name} (${debt.annualInterestRate}% APR)")
+        }
+    }
+
+    fun updateDebt(debt: DebtEntity) {
+        viewModelScope.launch {
+            repository.updateDebt(debt)
+            _toastEvent.emit("Updated ${debt.name}")
+        }
+    }
+
+    fun deleteDebt(debt: DebtEntity) {
+        viewModelScope.launch {
+            repository.deleteDebt(debt)
+            _toastEvent.emit("Removed ${debt.name}")
+        }
+    }
+
+    fun recordDebtPayment(debt: DebtEntity, amount: Double, recordInTransactions: Boolean = true) {
+        if (amount <= 0.0) return
+        viewModelScope.launch {
+            val newBalance = (debt.currentBalance - amount).coerceAtLeast(0.0)
+            repository.updateDebt(debt.copy(currentBalance = newBalance))
+
+            if (recordInTransactions) {
+                val now = System.currentTimeMillis()
+                val dateFmt = java.text.SimpleDateFormat("ddMMMyy", java.util.Locale.ENGLISH)
+                val timeFmt = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.ENGLISH)
+                val txn = TransactionEntity(
+                    amount = amount,
+                    type = "DEBIT",
+                    merchant = debt.name,
+                    category = if (debt.isStudentLoan) "Education" else "Debt Repayment",
+                    date = now,
+                    paymentMethod = "BANK_TRANSFER",
+                    notes = "${if (debt.isStudentLoan) "Student loan" else "Credit card"} payment • Remaining: ₹${newBalance.toLong()}",
+                    dateStr = dateFmt.format(java.util.Date(now)),
+                    timeStr = timeFmt.format(java.util.Date(now))
+                )
+                val insertedId = repository.insertTransaction(txn)
+                _latestAddedTxnId.value = insertedId
+            }
+
+            _toastEvent.emit(
+                if (newBalance <= 0.5) "${debt.name} is completely paid off!"
+                else "Paid ₹${amount.toLong()} toward ${debt.name}. Balance: ₹${newBalance.toLong()}"
+            )
         }
     }
 }

@@ -269,26 +269,97 @@ object MonthlyReviewEngine {
             append("\nNote: Educational budgeting review only. Does not recommend specific securities.\n")
         }
 
+        return writeReviewFile(context, fileName, "text/plain", body)
+    }
+
+    fun exportMonthlyReviewCsv(context: Context, review: MonthlyReviewReport): FileSaveResult {
+        val fileName = "FinanceCoach_MonthlyReview_${fileTsFmt.format(Date())}.csv"
+        val csv = buildString {
+            append("FINANCE COACH MONTHLY REVIEW SPREADSHEET\n")
+            append("Metric,Value\n")
+            append("Month,\"${review.monthLabel}\"\n")
+            append("Health Grade,\"${review.grade} (${review.score}/100)\"\n")
+            append("Total Income (INR),${review.totalIncome.toLong()}\n")
+            append("Fixed Costs (INR),${review.fixedCosts.toLong()}\n")
+            append("Variable Spending (INR),${review.variableSpend.toLong()}\n")
+            append("Net Monthly Savings (INR),${review.netSavings.toLong()}\n")
+            append("Savings Rate (%),${review.savingsRatePercent}%\n")
+            append("Active Recurring Total (INR),${review.activeSubscriptionsTotal.toLong()}\n")
+            append("Emergency Fund Current (INR),${review.emergencyFundCurrent.toLong()}\n")
+            append("Emergency Fund Target (INR),${review.emergencyFundTarget.toLong()}\n")
+            append("Emergency Fund Runway (Months),${String.format(Locale.ENGLISH, "%.1f", review.emergencyFundMonthsCovered)}\n\n")
+
+            append("BUDGET ADHERENCE\n")
+            append("Category,Actual (INR),Budgeted (INR),Used (%)\n")
+            for (row in review.budgetRows) {
+                append("\"${row.category}\",${row.actual.toLong()},${row.budgeted.toLong()},${row.percentUsed}%\n")
+            }
+            append("\n")
+
+            append("SAVINGS GOALS\n")
+            append("Goal,Saved (INR),Target (INR),Progress (%),Target Date\n")
+            for (g in review.goalsSnapshot) {
+                val pct = if (g.targetAmount > 0) ((g.savedAmount / g.targetAmount) * 100).toInt() else 0
+                append("\"${g.title.replace("\"", "\"\"")}\",${g.savedAmount.toLong()},${g.targetAmount.toLong()},$pct%,\"${g.targetDate.ifBlank { "Flexible" }}\"\n")
+            }
+        }
+        return writeReviewFile(context, fileName, "text/csv", csv)
+    }
+
+    private fun writeReviewFile(
+        context: Context,
+        fileName: String,
+        mimeType: String,
+        content: String
+    ): FileSaveResult {
         return try {
-            val bytes = body.toByteArray(Charsets.UTF_8)
+            val bytes = content.toByteArray(Charsets.UTF_8)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val values = ContentValues().apply {
                     put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                    put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                    put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
                     put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/FinanceCoach")
                 }
                 val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
                 if (uri != null) {
                     context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
-                    return FileSaveResult(true, fileName, "Downloads/FinanceCoach/$fileName", "Monthly Review saved to Downloads/FinanceCoach/$fileName")
+                    return FileSaveResult(
+                        success = true,
+                        fileName = fileName,
+                        filePath = "Downloads/FinanceCoach/$fileName",
+                        message = "Saved to Downloads/FinanceCoach/$fileName",
+                        fileUri = uri,
+                        mimeType = mimeType,
+                        rawContent = content
+                    )
                 }
             }
             val dir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir
             val file = File(dir, fileName)
             FileOutputStream(file).use { it.write(bytes) }
-            FileSaveResult(true, fileName, file.absolutePath, "Monthly Review saved to ${file.name}")
+            val uri = try {
+                androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+            } catch (_: Exception) {
+                null
+            }
+            FileSaveResult(
+                success = true,
+                fileName = fileName,
+                filePath = file.absolutePath,
+                message = "Saved to ${file.name}",
+                fileUri = uri,
+                mimeType = mimeType,
+                rawContent = content
+            )
         } catch (e: Exception) {
-            FileSaveResult(false, fileName, null, "Could not save review: ${e.localizedMessage}")
+            FileSaveResult(
+                success = false,
+                fileName = fileName,
+                filePath = null,
+                message = "Could not save report: ${e.localizedMessage}",
+                mimeType = mimeType,
+                rawContent = content
+            )
         }
     }
 }

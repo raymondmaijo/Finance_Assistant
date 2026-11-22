@@ -61,5 +61,8 @@ data class FileSaveResult(
     val success: Boolean,
     val fileName: String,
     val filePath: String? = null,
-    val message: String
+    val message: String,
+    val fileUri: android.net.Uri? = null,
+    val mimeType: String = "text/csv",
+    val rawContent: String = ""
 )

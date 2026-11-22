@@ -80,6 +80,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.ai.DebtProjectionEngine
 import com.example.data.model.TransactionEntity
 import com.example.ui.components.CategoryBadge
 import com.example.ui.components.CategoryIcons
@@ -113,6 +114,7 @@ fun DashboardScreen(
     onNavigateToSubscriptions: () -> Unit = {},
     onNavigateToFinancialProfile: () -> Unit = {},
     onNavigateToInsights: () -> Unit = {},
+    onNavigateToDebtTracker: () -> Unit = {},
     onOpenSmsSimulator: () -> Unit,
     onOpenAddTransaction: () -> Unit,
     modifier: Modifier = Modifier
@@ -129,6 +131,8 @@ fun DashboardScreen(
     val latestDetectedUpiTxn by viewModel.latestDetectedUpiTxn.collectAsStateWithLifecycle()
     val driftNudges by viewModel.driftNudges.collectAsStateWithLifecycle()
     val allRecurring by viewModel.allRecurring.collectAsStateWithLifecycle()
+    val allDebts by viewModel.allDebts.collectAsStateWithLifecycle()
+    val debtSummary = remember(allDebts) { DebtProjectionEngine.summarizePortfolio(allDebts) }
     val subAlertCount = allRecurring.count { it.hasAlert }
 
     val context = LocalContext.current
@@ -229,7 +233,7 @@ fun DashboardScreen(
             }
         }
 
-        // Quick Actions Grid (2 compact rows covering all 8 capabilities)
+        // Quick Actions Grid (2 compact rows covering core capabilities)
         item {
             QuickActionsRow(
                 subAlertCount = subAlertCount,
@@ -238,7 +242,7 @@ fun DashboardScreen(
                 onNavigateToGoals = onNavigateToGoals,
                 onNavigateToFinancialProfile = onNavigateToFinancialProfile,
                 onNavigateToRules = onNavigateToRules,
-                onOpenSimulator = onOpenSmsSimulator,
+                onNavigateToDebtTracker = onNavigateToDebtTracker,
                 onNavigateToInvestments = onNavigateToInvestments,
                 onNavigateToInsights = onNavigateToInsights
             )
@@ -321,6 +325,74 @@ fun DashboardScreen(
                                 .clip(RoundedCornerShape(3.dp)),
                             color = EmeraldLight,
                             trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Student Loans & Credit Card Debt Summary Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .clickable { onNavigateToDebtTracker() }
+                    .testTag("dashboard_debt_tracker_card"),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.CreditCard,
+                                contentDescription = null,
+                                tint = ExpenseRed,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Student Loans & Credit Card Debt",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Text(
+                            text = "Schedules →",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Balance: ${Formatters.formatRupee(debtSummary.totalBalance)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Avg APR: ${String.format("%.1f", debtSummary.weightedAverageApr)}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = WarningOrange,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Interest: ${Formatters.formatRupee(debtSummary.monthlyInterestBurn)}/mo",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ExpenseRed,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
@@ -753,7 +825,7 @@ fun QuickActionsRow(
     onNavigateToGoals: () -> Unit,
     onNavigateToFinancialProfile: () -> Unit,
     onNavigateToRules: () -> Unit,
-    onOpenSimulator: () -> Unit,
+    onNavigateToDebtTracker: () -> Unit,
     onNavigateToInvestments: () -> Unit,
     onNavigateToInsights: () -> Unit
 ) {
@@ -782,18 +854,18 @@ fun QuickActionsRow(
                 testTag = "quick_action_subscriptions"
             )
             QuickActionButton(
+                label = "Debt & Loans",
+                icon = Icons.Default.CreditCard,
+                color = ExpenseRed,
+                onClick = onNavigateToDebtTracker,
+                testTag = "quick_action_debt"
+            )
+            QuickActionButton(
                 label = "What-If Goals",
                 icon = Icons.Default.Savings,
                 color = WarningOrange,
                 onClick = onNavigateToGoals,
                 testTag = "quick_action_goals"
-            )
-            QuickActionButton(
-                label = "Profile",
-                icon = Icons.Default.AccountCircle,
-                color = SkyTertiary,
-                onClick = onNavigateToFinancialProfile,
-                testTag = "quick_action_profile"
             )
         }
         Row(
@@ -815,11 +887,11 @@ fun QuickActionsRow(
                 testTag = "quick_action_rules"
             )
             QuickActionButton(
-                label = "Test SMS",
-                icon = Icons.Default.Sms,
-                color = EmeraldPrimary,
-                onClick = onOpenSimulator,
-                testTag = "quick_action_sms"
+                label = "Profile",
+                icon = Icons.Default.AccountCircle,
+                color = SkyTertiary,
+                onClick = onNavigateToFinancialProfile,
+                testTag = "quick_action_profile"
             )
             QuickActionButton(
                 label = "Investments",

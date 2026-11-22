@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Insights
@@ -60,6 +61,7 @@ import com.example.ui.screens.AccountRulesScreen
 import com.example.ui.screens.AssistantScreen
 import com.example.ui.screens.BudgetScreen
 import com.example.ui.screens.DashboardScreen
+import com.example.ui.screens.DebtTrackerScreen
 import com.example.ui.screens.FinancialProfileScreen
 import com.example.ui.screens.GoalsScreen
 import com.example.ui.screens.InsightsScreen
@@ -93,6 +95,7 @@ sealed class NavScreen(val route: String, val title: String, val icon: ImageVect
     object FinancialProfile : NavScreen("financial_profile", "Financial Profile", Icons.Default.AccountCircle)
     object Rules : NavScreen("rules", "Account Rules", Icons.AutoMirrored.Filled.Rule)
     object Investments : NavScreen("investments", "Investments", Icons.AutoMirrored.Filled.TrendingUp)
+    object DebtTracker : NavScreen("debt_tracker", "Debt & Loans", Icons.Default.CreditCard)
     object Goals : NavScreen("goals", "Goals", Icons.Default.Savings)
     object Settings : NavScreen("settings", "Settings", Icons.Default.Settings)
     object Onboarding : NavScreen("onboarding", "Welcome", Icons.Default.Home)
@@ -167,6 +170,7 @@ class MainActivity : ComponentActivity() {
                                             NavScreen.FinancialProfile.route -> "Financial Profile"
                                             NavScreen.Rules.route -> "Rules & Learning"
                                             NavScreen.Investments.route -> "Investments"
+                                            NavScreen.DebtTracker.route -> "Debt & Loans"
                                             NavScreen.Goals.route -> "Goals & What-If"
                                             NavScreen.Settings.route -> "Settings & Privacy"
                                             else -> "Finance Coach"
@@ -303,6 +307,7 @@ class MainActivity : ComponentActivity() {
                                     onNavigateToSubscriptions = { navController.navigate(NavScreen.Subscriptions.route) },
                                     onNavigateToFinancialProfile = { navController.navigate(NavScreen.FinancialProfile.route) },
                                     onNavigateToInsights = { navController.navigate(NavScreen.Insights.route) },
+                                    onNavigateToDebtTracker = { navController.navigate(NavScreen.DebtTracker.route) },
                                     onOpenSmsSimulator = { showSimulatorDialog = true },
                                     onOpenAddTransaction = { showAddTransactionDialog = true }
                                 )
@@ -367,6 +372,10 @@ class MainActivity : ComponentActivity() {
 
                             composable(NavScreen.Investments.route) {
                                 InvestmentsScreen(viewModel = viewModel)
+                            }
+
+                            composable(NavScreen.DebtTracker.route) {
+                                DebtTrackerScreen(viewModel = viewModel)
                             }
 
                             composable(NavScreen.Goals.route) {

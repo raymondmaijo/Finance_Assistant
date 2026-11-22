@@ -8,6 +8,7 @@ import androidx.room.Query
 import androidx.room.Update
 import com.example.data.model.AccountRuleEntity
 import com.example.data.model.BudgetEntity
+import com.example.data.model.DebtEntity
 import com.example.data.model.GoalEntity
 import com.example.data.model.InvestmentEntity
 import com.example.data.model.LearnedMappingEntity
@@ -18,16 +19,16 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TransactionDao {
-    @Query("SELECT * FROM transactions ORDER BY date DESC")
+    @Query("SELECT * FROM transactions ORDER BY date DESC, id DESC")
     fun getAllTransactions(): Flow<List<TransactionEntity>>
 
-    @Query("SELECT * FROM transactions WHERE date >= :startTime AND date <= :endTime ORDER BY date DESC")
+    @Query("SELECT * FROM transactions WHERE date >= :startTime AND date <= :endTime ORDER BY date DESC, id DESC")
     fun getTransactionsBetween(startTime: Long, endTime: Long): Flow<List<TransactionEntity>>
 
     @Query("SELECT * FROM transactions WHERE id = :id LIMIT 1")
     suspend fun getTransactionById(id: Long): TransactionEntity?
 
-    @Query("SELECT * FROM transactions ORDER BY date DESC")
+    @Query("SELECT * FROM transactions ORDER BY date DESC, id DESC")
     suspend fun getAllTransactionsSnapshot(): List<TransactionEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -171,3 +172,25 @@ interface LearnedMappingDao {
     @Query("DELETE FROM learned_mappings WHERE merchantNormalized = :merchant")
     suspend fun deleteByMerchant(merchant: String)
 }
+
+@Dao
+interface DebtDao {
+    @Query("SELECT * FROM debts ORDER BY annualInterestRate DESC, currentBalance DESC")
+    fun getAllDebts(): Flow<List<DebtEntity>>
+
+    @Query("SELECT * FROM debts ORDER BY annualInterestRate DESC, currentBalance DESC")
+    suspend fun getAllDebtsSnapshot(): List<DebtEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDebt(debt: DebtEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(debts: List<DebtEntity>)
+
+    @Update
+    suspend fun updateDebt(debt: DebtEntity)
+
+    @Delete
+    suspend fun deleteDebt(debt: DebtEntity)
+}
+

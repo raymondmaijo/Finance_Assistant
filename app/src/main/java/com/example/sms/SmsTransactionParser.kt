@@ -386,17 +386,21 @@ object SmsTransactionParser {
                 SimpleDateFormat("ddMMMMyy", Locale.ENGLISH)
             )
 
+            val now = System.currentTimeMillis()
             for (fmt in formats) {
                 try {
                     val parsed = fmt.parse(combined)
-                    if (parsed != null) return parsed.time
+                    if (parsed != null) {
+                        return if (parsed.time > now) now else parsed.time
+                    }
                 } catch (_: Exception) {}
             }
 
             // Fallback: parse date only
             val dateFmt = SimpleDateFormat("ddMMMyy", Locale.ENGLISH)
             val parsedDate = dateFmt.parse(cleanDate)
-            parsedDate?.time ?: System.currentTimeMillis()
+            val millis = parsedDate?.time ?: now
+            if (millis > now) now else millis
         } catch (_: Exception) {
             System.currentTimeMillis()
         }

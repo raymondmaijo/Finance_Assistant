@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -32,11 +33,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -50,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.components.Formatters
+import com.example.ui.components.SpreadsheetViewerDialog
 import com.example.ui.theme.EmeraldLight
 import com.example.ui.theme.EmeraldPrimary
 import com.example.ui.theme.ExpenseRed
@@ -57,7 +61,9 @@ import com.example.ui.theme.IncomeGreen
 import com.example.ui.theme.SkyTertiary
 import com.example.ui.theme.WarningOrange
 import com.example.ui.viewmodel.MainViewModel
+import com.example.util.FileSaveResult
 import com.example.util.MonthlyReviewEngine
+import com.example.util.ReportExporter
 import java.util.Locale
 import kotlin.math.abs
 
@@ -74,6 +80,7 @@ fun MonthlyReviewSection(
     val goals by viewModel.allGoals.collectAsStateWithLifecycle()
 
     var monthOffset by remember { mutableIntStateOf(0) }
+    var spreadsheetToView by remember { mutableStateOf<FileSaveResult?>(null) }
 
     val review = remember(monthOffset, transactions, budgets, profile, recurring, goals) {
         MonthlyReviewEngine.buildMonthlyReview(
@@ -378,20 +385,56 @@ fun MonthlyReviewSection(
             }
         }
 
-        // Export Review CTA
+        // Export Review CTAs (Spreadsheet CSV + Text Report)
         item {
-            Button(
-                onClick = {
-                    val result = MonthlyReviewEngine.exportMonthlyReviewText(context, review)
-                    Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
-                },
-                modifier = Modifier.fillMaxWidth().testTag("export_monthly_review_btn")
-            ) {
-                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Export Monthly Review Report (.txt)", fontWeight = FontWeight.Bold)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        val result = MonthlyReviewEngine.exportMonthlyReviewCsv(context, review)
+                        Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                        if (result.success) {
+                            val openedExternally = result.fileUri?.let { uri ->
+                                ReportExporter.openFileExternally(context, uri, result.mimeType)
+                            } ?: false
+                            if (!openedExternally) {
+                                spreadsheetToView = result
+                            }
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("export_monthly_review_csv_btn")
+                ) {
+                    Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Download & Open Spreadsheet (.csv)", fontWeight = FontWeight.Bold)
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        val result = MonthlyReviewEngine.exportMonthlyReviewText(context, review)
+                        Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                        if (result.success && result.fileUri != null) {
+                            ReportExporter.openFileExternally(context, result.fileUri, result.mimeType)
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("export_monthly_review_btn")
+                ) {
+                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Export Text Summary (.txt)", fontWeight = FontWeight.SemiBold)
+                }
             }
         }
+    }
+
+    if (spreadsheetToView != null) {
+        SpreadsheetViewerDialog(
+            fileResult = spreadsheetToView!!,
+            onDismiss = { spreadsheetToView = null }
+        )
     }
 }
 

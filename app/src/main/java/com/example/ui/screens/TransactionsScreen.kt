@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import android.Manifest
@@ -58,6 +59,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -98,9 +100,11 @@ fun TransactionsScreen(
 ) {
     val allTransactions by viewModel.allTransactions.collectAsStateWithLifecycle()
     val profile by viewModel.userProfile.collectAsStateWithLifecycle()
+    val latestAddedTxnId by viewModel.latestAddedTxnId.collectAsStateWithLifecycle()
     val maskAccounts = profile?.maskAccountNumbers ?: true
 
     val context = LocalContext.current
+    val listState = rememberLazyListState()
     val smsPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -117,6 +121,7 @@ fun TransactionsScreen(
     var activeDetailTxn by remember { mutableStateOf<TransactionEntity?>(null) }
     var txnToSplit by remember { mutableStateOf<TransactionEntity?>(null) }
     var txnToDelete by remember { mutableStateOf<TransactionEntity?>(null) }
+    var lastSeenAddedId by remember { mutableStateOf<Long?>(null) }
 
     // Filter transactions
     val filteredList = remember(
@@ -162,6 +167,25 @@ fun TransactionsScreen(
             }
 
             matchesQuery && matchesType && matchesCat && matchesDate
+        }.sortedWith(compareByDescending<TransactionEntity> { it.date }.thenByDescending { it.id })
+    }
+
+    // When a brand-new transaction is added, ensure filters don't hide it and scroll straight to top
+    LaunchedEffect(latestAddedTxnId) {
+        if (latestAddedTxnId != null && latestAddedTxnId != lastSeenAddedId) {
+            lastSeenAddedId = latestAddedTxnId
+            searchQuery = ""
+            selectedTypeFilter = "ALL"
+            selectedCategoryFilter = "ALL"
+            selectedDateFilter = "ALL"
+        }
+    }
+
+    // Prevent Compose LazyColumn key-anchoring from pushing newly prepended items above the viewport
+    val topTxnId = filteredList.firstOrNull()?.id
+    LaunchedEffect(topTxnId) {
+        if (topTxnId != null) {
+            listState.animateScrollToItem(0)
         }
     }
 
@@ -357,6 +381,7 @@ fun TransactionsScreen(
                 }
             } else {
                 LazyColumn(
+                    state = listState,
                     contentPadding = PaddingValues(bottom = 96.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {

@@ -17,12 +17,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.CreditCard
-import androidx.compose.material.icons.filled.Savings
-import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -61,9 +57,6 @@ fun OnboardingScreen(
     var allowanceStr by remember { mutableStateOf("12000") }
     var primaryAccount by remember { mutableStateOf("HDFC XX1234") }
     var savingsGoalStr by remember { mutableStateOf("2500") }
-
-    var initialRuleAccount by remember { mutableStateOf("XX1234") }
-    var initialRuleCategory by remember { mutableStateOf("Food") }
 
     val scrollState = rememberScrollState()
 
@@ -169,60 +162,6 @@ fun OnboardingScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Initial Account Rule Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-            )
-        ) {
-            Column(modifier = Modifier.padding(18.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.CreditCard,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Initial Account Rule (Recommended)",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Map your dining account ending in 1234 to automatically categorize food expenses.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = initialRuleAccount,
-                        onValueChange = { initialRuleAccount = it },
-                        label = { Text("Account Identifier") },
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = initialRuleCategory,
-                        onValueChange = { initialRuleCategory = it },
-                        label = { Text("Category") },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-        }
-
         Spacer(modifier = Modifier.height(24.dp))
 
         Button(
@@ -234,8 +173,8 @@ fun OnboardingScreen(
                     allowance = allowance,
                     primaryAccount = primaryAccount,
                     savingsGoal = savings,
-                    ruleAccount = initialRuleAccount,
-                    ruleCategory = initialRuleCategory
+                    ruleAccount = null,
+                    ruleCategory = null
                 )
                 onFinishOnboarding()
             },
@@ -247,7 +186,7 @@ fun OnboardingScreen(
         ) {
             Text("Get Started with Finance Coach", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.width(8.dp))
-            Icon(imageVector = Icons.Default.ArrowForward, contentDescription = null)
+            Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
         }
 
         Spacer(modifier = Modifier.height(32.dp))

@@ -198,9 +198,12 @@ object WhatIfSimulatorEngine {
      */
     fun parseNaturalLanguageScenario(query: String): WhatIfScenario? {
         val q = query.lowercase(Locale.ENGLISH)
-        if (!q.contains("what if") && !q.contains("simulate") && !q.contains("scenario") &&
-            !q.contains("if i cut") && !q.contains("if my rent") && !q.contains("if rent")
-        ) {
+        val hasWhatIfKeyword = q.contains("what if") || q.contains("simulate") || q.contains("scenario") ||
+            q.contains("if i cut") || q.contains("if my rent") || q.contains("if rent") ||
+            q.contains("cut dining") || q.contains("cut food") || q.contains("reduce dining") ||
+            q.contains("reduce food") || q.contains("rent goes up") || q.contains("rent increases") ||
+            q.contains("cancel unused") || q.contains("visual analysis") || q.contains("bar chart")
+        if (!hasWhatIfKeyword) {
             return null
         }
 

@@ -276,7 +276,7 @@ object ReportExporter {
 
         val csvContent = buildString {
             append("========================================================================\n")
-            append("CAMPUSFIN STUDENT SPEND REPORT (${report.period.title.uppercase(Locale.ENGLISH)})\n")
+            append("FINANCE COACH SPEND REPORT (${report.period.title.uppercase(Locale.ENGLISH)})\n")
             append("========================================================================\n")
             append("Period:,\"${report.periodLabel} (${report.dateRangeStr})\"\n")
             append("Generated At:,\"${dateFormat.format(Date(report.generatedTimestamp))} ${timeFormat.format(Date(report.generatedTimestamp))}\"\n")
@@ -316,7 +316,7 @@ object ReportExporter {
             }
         }
 
-        return writeToStorage(context, fileName, "text/csv", csvContent.toByteArray(Charsets.UTF_8))
+        return writeToStorage(context, fileName, "text/csv", csvContent.toByteArray(Charsets.UTF_8), csvContent)
     }
 
     // Export Formatted Text / Markdown Summary
@@ -373,7 +373,7 @@ object ReportExporter {
             append("Tracked offline & securely by FinanceCoach\n")
         }
 
-        return writeToStorage(context, fileName, "text/plain", textContent.toByteArray(Charsets.UTF_8))
+        return writeToStorage(context, fileName, "text/plain", textContent.toByteArray(Charsets.UTF_8), textContent)
     }
 
     // Share Report Intent with File Provider
@@ -423,11 +423,103 @@ object ReportExporter {
         }
     }
 
+    /**
+     * Attempts to open an exported spreadsheet or report file in an installed external app
+     * (such as Google Sheets, Microsoft Excel, or a CSV/text viewer).
+     * Returns true if an external app handled the intent, or false if none is installed.
+     */
+    fun openFileExternally(context: Context, uri: Uri, mimeType: String): Boolean {
+        val candidateMimeTypes = if (mimeType.contains("csv", ignoreCase = true)) {
+            listOf("text/csv", "text/comma-separated-values", "application/vnd.ms-excel")
+        } else {
+            listOf(mimeType, "text/plain")
+        }
+
+        val pm = context.packageManager
+        for (mime in candidateMimeTypes) {
+            val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mime)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (viewIntent.resolveActivity(pm) != null) {
+                return try {
+                    context.startActivity(viewIntent)
+                    true
+                } catch (_: Exception) {
+                    false
+                }
+            }
+        }
+        return false
+    }
+
+    /**
+     * Opens a system chooser so the user can pick any app (Sheets, Excel, Drive, Files, etc.)
+     * to open the saved file.
+     */
+    fun openWithChooser(context: Context, uri: Uri, mimeType: String, title: String = "Open Spreadsheet"): Boolean {
+        return try {
+            val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mimeType)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            val chooser = Intent.createChooser(viewIntent, title).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(chooser)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Parses RFC-4180 CSV content into a 2D table for the built-in spreadsheet viewer.
+     */
+    fun parseCsvTable(csvContent: String): List<List<String>> {
+        val rows = mutableListOf<List<String>>()
+        for (rawLine in csvContent.lines()) {
+            if (rawLine.isBlank()) {
+                rows.add(emptyList())
+                continue
+            }
+            val cells = mutableListOf<String>()
+            val current = StringBuilder()
+            var inQuotes = false
+            var i = 0
+            while (i < rawLine.length) {
+                val ch = rawLine[i]
+                when {
+                    ch == '"' -> {
+                        if (inQuotes && i + 1 < rawLine.length && rawLine[i + 1] == '"') {
+                            current.append('"')
+                            i++
+                        } else {
+                            inQuotes = !inQuotes
+                        }
+                    }
+                    ch == ',' && !inQuotes -> {
+                        cells.add(current.toString().trim())
+                        current.clear()
+                    }
+                    else -> current.append(ch)
+                }
+                i++
+            }
+            cells.add(current.toString().trim())
+            rows.add(cells)
+        }
+        return rows
+    }
+
     private fun writeToStorage(
         context: Context,
         fileName: String,
         mimeType: String,
-        bytes: ByteArray
+        bytes: ByteArray,
+        rawContent: String = ""
     ): FileSaveResult {
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -448,23 +540,30 @@ object ReportExporter {
                         success = true,
                         fileName = fileName,
                         filePath = "Downloads/FinanceCoach/$fileName",
-                        message = "Saved to Downloads/FinanceCoach/$fileName"
+                        message = "Saved to Downloads/FinanceCoach/$fileName",
+                        fileUri = uri,
+                        mimeType = mimeType,
+                        rawContent = rawContent
                     )
                 } else {
-                    // Fallback to internal files
-                    saveToAppDownloads(context, fileName, bytes)
+                    saveToAppDownloads(context, fileName, mimeType, bytes, rawContent)
                 }
             } else {
-                saveToAppDownloads(context, fileName, bytes)
+                saveToAppDownloads(context, fileName, mimeType, bytes, rawContent)
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            // Fallback to internal files
-            saveToAppDownloads(context, fileName, bytes)
+            saveToAppDownloads(context, fileName, mimeType, bytes, rawContent)
         }
     }
 
-    private fun saveToAppDownloads(context: Context, fileName: String, bytes: ByteArray): FileSaveResult {
+    private fun saveToAppDownloads(
+        context: Context,
+        fileName: String,
+        mimeType: String,
+        bytes: ByteArray,
+        rawContent: String = ""
+    ): FileSaveResult {
         return try {
             val downloadDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir
             val file = File(downloadDir, fileName)
@@ -472,18 +571,28 @@ object ReportExporter {
                 it.write(bytes)
                 it.flush()
             }
+            val uri = try {
+                FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+            } catch (_: Exception) {
+                null
+            }
             FileSaveResult(
                 success = true,
                 fileName = fileName,
                 filePath = file.absolutePath,
-                message = "Saved report to ${file.name}"
+                message = "Saved report to ${file.name}",
+                fileUri = uri,
+                mimeType = mimeType,
+                rawContent = rawContent
             )
         } catch (e: Exception) {
             FileSaveResult(
                 success = false,
                 fileName = fileName,
                 filePath = null,
-                message = "Failed to save file: ${e.localizedMessage}"
+                message = "Failed to save file: ${e.localizedMessage}",
+                mimeType = mimeType,
+                rawContent = rawContent
             )
         }
     }

@@ -169,3 +169,35 @@ data class LearnedMappingEntity(
     val originalCategory: String = "",
     val sampleMerchant: String = ""
 )
+
+@Entity(tableName = "debts")
+data class DebtEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val name: String,
+    val debtType: String = "STUDENT_LOAN", // "STUDENT_LOAN" or "CREDIT_CARD"
+    val lender: String = "",
+    val originalPrincipal: Double, // Original loan amount or Credit Card limit
+    val currentBalance: Double,
+    val annualInterestRate: Double, // APR percentage e.g. 8.5 or 36.0
+    val minimumMonthlyPayment: Double,
+    val dueDayOfMonth: Int = 5, // 1..28
+    val gracePeriodMonths: Int = 0, // Student loan moratorium/grace period
+    val notes: String = "",
+    val createdAt: Long = System.currentTimeMillis()
+) {
+    val isStudentLoan: Boolean get() = debtType.equals("STUDENT_LOAN", ignoreCase = true)
+    val isCreditCard: Boolean get() = debtType.equals("CREDIT_CARD", ignoreCase = true)
+    val monthlyInterestRate: Double get() = (annualInterestRate.coerceAtLeast(0.0) / 100.0) / 12.0
+    val currentMonthlyInterest: Double get() = currentBalance.coerceAtLeast(0.0) * monthlyInterestRate
+    val paidOffAmount: Double get() = (originalPrincipal - currentBalance).coerceAtLeast(0.0)
+    val payoffProgressFraction: Float
+        get() = if (originalPrincipal > 0.0) {
+            (paidOffAmount / originalPrincipal).toFloat().coerceIn(0f, 1f)
+        } else 0f
+    val creditUtilizationPercent: Int
+        get() = if (isCreditCard && originalPrincipal > 0.0) {
+            ((currentBalance / originalPrincipal) * 100.0).toInt().coerceIn(0, 999)
+        } else 0
+}
+

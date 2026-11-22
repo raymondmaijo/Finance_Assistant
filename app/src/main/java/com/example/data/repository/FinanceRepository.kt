@@ -3,6 +3,7 @@ package com.example.data.repository
 import com.example.data.db.AppDatabase
 import com.example.data.model.AccountRuleEntity
 import com.example.data.model.BudgetEntity
+import com.example.data.model.DebtEntity
 import com.example.data.model.GoalEntity
 import com.example.data.model.InvestmentEntity
 import com.example.data.model.LearnedMappingEntity
@@ -24,6 +25,7 @@ class FinanceRepository(private val database: AppDatabase) {
     private val investmentDao = database.investmentDao()
     private val userProfileDao = database.userProfileDao()
     private val learnedMappingDao = database.learnedMappingDao()
+    private val debtDao = database.debtDao()
 
     val allTransactions: Flow<List<TransactionEntity>> = transactionDao.getAllTransactions()
     val allRules: Flow<List<AccountRuleEntity>> = accountRuleDao.getAllRules()
@@ -33,6 +35,7 @@ class FinanceRepository(private val database: AppDatabase) {
     val allInvestments: Flow<List<InvestmentEntity>> = investmentDao.getAllInvestments()
     val userProfile: Flow<UserProfileEntity?> = userProfileDao.getUserProfile()
     val allLearnedMappings: Flow<List<LearnedMappingEntity>> = learnedMappingDao.observeAllLearnedMappings()
+    val allDebts: Flow<List<DebtEntity>> = debtDao.getAllDebts()
 
     suspend fun getTransactionsSnapshot(): List<TransactionEntity> =
         transactionDao.getAllTransactionsSnapshot()
@@ -54,6 +57,9 @@ class FinanceRepository(private val database: AppDatabase) {
 
     suspend fun getAllLearnedMappingsSnapshot(): List<LearnedMappingEntity> =
         learnedMappingDao.getAllLearnedMappings()
+
+    suspend fun getDebtsSnapshot(): List<DebtEntity> =
+        debtDao.getAllDebtsSnapshot()
 
     suspend fun insertTransaction(transaction: TransactionEntity): Long =
         transactionDao.insertTransaction(transaction)
@@ -111,6 +117,15 @@ class FinanceRepository(private val database: AppDatabase) {
 
     suspend fun saveUserProfile(profile: UserProfileEntity) =
         userProfileDao.saveUserProfile(profile)
+
+    suspend fun insertDebt(debt: DebtEntity): Long =
+        debtDao.insertDebt(debt)
+
+    suspend fun updateDebt(debt: DebtEntity) =
+        debtDao.updateDebt(debt)
+
+    suspend fun deleteDebt(debt: DebtEntity) =
+        debtDao.deleteDebt(debt)
 
     suspend fun recordLearnedCategory(
         merchant: String,
@@ -656,6 +671,38 @@ class FinanceRepository(private val database: AppDatabase) {
                         status = "ACTIVE",
                         alertMessage = "",
                         isAutoDetected = true
+                    )
+                )
+            )
+        }
+
+        val existingDebts = debtDao.getAllDebtsSnapshot()
+        if (existingDebts.isEmpty()) {
+            debtDao.insertAll(
+                listOf(
+                    DebtEntity(
+                        name = "SBI Student Education Loan",
+                        debtType = "STUDENT_LOAN",
+                        lender = "State Bank of India",
+                        originalPrincipal = 250000.0,
+                        currentBalance = 195000.0,
+                        annualInterestRate = 8.85,
+                        minimumMonthlyPayment = 4450.0,
+                        dueDayOfMonth = 5,
+                        gracePeriodMonths = 0,
+                        notes = "B.Tech semester tuition education loan (floating rate)"
+                    ),
+                    DebtEntity(
+                        name = "HDFC Millennia Credit Card",
+                        debtType = "CREDIT_CARD",
+                        lender = "HDFC Bank",
+                        originalPrincipal = 50000.0,
+                        currentBalance = 18400.0,
+                        annualInterestRate = 36.0,
+                        minimumMonthlyPayment = 1500.0,
+                        dueDayOfMonth = 15,
+                        gracePeriodMonths = 0,
+                        notes = "Revolving card balance — pay above minimum to cut 36% APR burn"
                     )
                 )
             )
